@@ -1,0 +1,201 @@
+# Source-of-truth catalog for datasets needed to reproduce the paper.
+# Populated incrementally, phase by phase. Currently: Exp 1 only
+# (§2 main robustness experiment -- Table 1 / Figure 1, 20 benchmarks).
+#
+# Each entry:
+#   name: short id, matches the data/benchmarks/<name>/ save directory
+#   task_type: mc (multiple choice) | sa (short answer)
+#   paper_ref: citation number from the paper's reference list
+#   hf_dataset: HuggingFace datasets id
+#   hf_config: config/subset name passed to load_dataset (null if none)
+#   notes: anything uncertain -- fallback ids, config-name guesses, etc.
+
+benchmarks:
+  # --- Multiple choice (11) ---
+  - name: arc_challenge
+    task_type: mc
+    paper_ref: 13
+    hf_dataset: allenai/ai2_arc
+    hf_config: ARC-Challenge
+    notes: null
+
+  - name: arc_easy
+    task_type: mc
+    paper_ref: 13
+    hf_dataset: allenai/ai2_arc
+    hf_config: ARC-Easy
+    notes: null
+
+  - name: copa
+    task_type: mc
+    paper_ref: 54
+    hf_dataset: aps/super_glue
+    hf_config: copa
+    notes: >
+      Auto-converted parquet mirror of the original SuperGLUE COPA (400
+      train / 100 validation / 500 test). Do NOT use pkavumba/balanced-copa
+      -- that's an augmented variant (Kavumba et al.) with mirrored
+      questions added, not the original 500-question COPA the paper cites.
+
+  - name: winogrande
+    task_type: mc
+    paper_ref: 55
+    hf_dataset: allenai/winogrande
+    hf_config: winogrande_xl
+    notes: null
+
+  - name: winograd
+    task_type: mc
+    paper_ref: 37
+    hf_dataset: WillHeld/wsc273
+    hf_config: null
+    notes: >
+      Clean parquet-native mirror of WSC273 (273 examples, verified against
+      the canonical "city councilmen" example). ErnestSDavis/winograd_wsc
+      and the original winograd_wsc HF dataset are script-based and fail
+      under datasets==5.0.0.
+
+  - name: commonsense_qa
+    task_type: mc
+    paper_ref: 62
+    hf_dataset: tau/commonsense_qa
+    hf_config: null
+    notes: null
+
+  - name: openbookqa
+    task_type: mc
+    paper_ref: 44
+    hf_dataset: allenai/openbookqa
+    hf_config: main
+    notes: null
+
+  - name: piqa
+    task_type: mc
+    paper_ref: 6
+    hf_dataset: ybisk/piqa
+    hf_config: null
+    hf_revision: refs/convert/parquet
+    notes: >
+      The default revision is script-based and fails under datasets==5.0.0.
+      HF auto-converts every dataset to parquet on a hidden
+      refs/convert/parquet branch -- using that revision gives the official,
+      complete data (train=16113, validation=1838, test=3084) straight from
+      the original repo, not a third-party mirror.
+
+  - name: mmlu
+    task_type: mc
+    paper_ref: 23
+    hf_dataset: cais/mmlu
+    hf_config: all
+    notes: >
+      Paper samples 500 questions at eval time; this fetch pulls the full
+      test set, sampling happens in the eval harness, not here.
+
+  - name: boolq
+    task_type: mc
+    paper_ref: 11
+    hf_dataset: google/boolq
+    hf_config: null
+    notes: null
+
+  - name: hellaswag
+    task_type: mc
+    paper_ref: 73
+    hf_dataset: Rowan/hellaswag
+    hf_config: null
+    notes: null
+
+  # --- Short answer (9) ---
+  - name: wikidata_qa
+    task_type: sa
+    paper_ref: 5
+    hf_dataset: tasksource/bigbench
+    hf_config: qa_wikidata
+    notes: "BIG-bench task qa_wikidata. Fallback: google/bigbench."
+
+  - name: tofu
+    task_type: sa
+    paper_ref: 42
+    hf_dataset: locuslab/TOFU
+    hf_config: retain99
+    notes: >
+      Paper says "the retain set" without specifying which percentage.
+      Picked retain99 (pairs with the smallest forget split, forget01) as
+      the most standard default -- revisit if results don't line up with
+      the paper's reported numbers. retain90/retain95 are the alternatives
+      if this needs to change.
+
+  - name: trivia_qa
+    task_type: sa
+    paper_ref: 31
+    hf_dataset: mandarjoshi/trivia_qa
+    hf_config: rc.nocontext
+    notes: "Using rc.nocontext to avoid the multi-GB reading-context files."
+
+  - name: jeopardy_qa
+    task_type: sa
+    paper_ref: 32
+    hf_dataset: jeopardy-datasets/jeopardy
+    hf_config: null
+    hf_revision: refs/convert/parquet
+    notes: >
+      Default revision is script-based and fails under datasets==5.0.0;
+      refs/convert/parquet gives the full official 216,930-question set
+      (category, air_date, question, value, answer, round, show_number).
+
+  - name: alpaca_eval
+    task_type: sa
+    paper_ref: 17
+    hf_dataset: tatsu-lab/alpaca_eval
+    hf_config: null
+    hf_data_files:
+      eval: "hf://datasets/tatsu-lab/alpaca_eval@refs%2Fconvert%2Fparquet/alpaca_eval/eval/0000.parquet"
+    notes: >
+      Default revision is script-based and fails under datasets==5.0.0.
+      The repo's refs/convert/parquet auto-conversion mashes several
+      incompatible-schema files (eval set, annotations, leaderboard data)
+      into one "default" config and errors on cast -- fetching the single
+      actual eval-set file (805 examples: instruction/output/generator/
+      dataset) directly avoids that. Judged with alpaca_eval_gpt4 (needs
+      OPENAI_API_KEY at eval time, not at fetch time). Also add the
+      `alpaca_eval` pip package.
+
+  - name: math
+    task_type: sa
+    paper_ref: 24
+    hf_dataset: EleutherAI/hendrycks_math
+    hf_config:
+      - algebra
+      - counting_and_probability
+      - geometry
+      - intermediate_algebra
+      - number_theory
+      - prealgebra
+      - precalculus
+    notes: >
+      Parquet-native mirror of hendrycks/competition_math. No combined "all"
+      config exists here (unlike cais/mmlu) -- only the 7 subject configs
+      separately. hf_config is a list: fetch script concatenates all 7 into
+      one dataset. Verified result matches the official MATH split exactly
+      (train=7500, test=5000).
+
+  - name: cute
+    task_type: sa
+    paper_ref: 18
+    hf_dataset: leukas/cute
+    hf_config: null
+    notes: null
+
+  - name: gsm8k
+    task_type: sa
+    paper_ref: 14
+    hf_dataset: openai/gsm8k
+    hf_config: main
+    notes: null
+
+  - name: drop
+    task_type: sa
+    paper_ref: 16
+    hf_dataset: ucinlp/drop
+    hf_config: null
+    notes: null

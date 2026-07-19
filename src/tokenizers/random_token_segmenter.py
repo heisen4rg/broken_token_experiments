@@ -1,5 +1,11 @@
+import sys
 from functools import lru_cache
-from transformers import AutoTokenizer
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import hf_cache  # noqa: E402, F401  (sets HF_HOME before transformers is imported)
+
+from transformers import AutoTokenizer  # noqa: E402
 import random
 import string
 
