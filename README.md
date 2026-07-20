@@ -32,17 +32,28 @@ Every fix is noted directly in `manifest.yaml` so the reasoning doesn't get lost
 
 Also added `src/hf_cache.py`, which redirects all HuggingFace downloads (models and datasets) into `.cache/` inside this repo instead of the usual `~/.cache/huggingface` — so this project's disk footprint is self-contained and deletable, without breaking access to gated repos (it carries your HF token over).
 
-**Note:** `data/benchmarks/` and `.cache/` are gitignored — the actual downloaded data lives locally only, not in the repo. Regenerate it anytime with `python src/data/fetch_benchmarks.py`. Still an open question (for you and your mentor) whether the real data should be committed instead — plain git chokes on a few of the larger files (>100MB), so it'd mean either trimming to just the splits actually evaluated (the train splits currently included aren't used by any experiment in the paper — everything here is zero-shot evaluation, nothing gets finetuned on these 20 benchmarks) or switching to Git LFS.
+**Note:** `data/benchmarks/` and `data/sources/` (raw third-party pulls) plus `.cache/` are gitignored — regenerate anytime with `python src/data/fetch_benchmarks.py`. Still an open question (for you and your mentor) whether the real benchmark data should be committed instead — plain git chokes on a few of the larger files (>100MB), so it'd mean either trimming to just the splits actually evaluated (the train splits currently included aren't used by any experiment in the paper — everything here is zero-shot evaluation, nothing gets finetuned on these 20 benchmarks) or switching to Git LFS.
+
+### §3's constructed tasks + §4.3's probes (`src/data/build_*.py` → `data/constructed/`)
+
+Six task datasets, one builder script each, all committed directly (small — a few KB to ~5MB each, no size concerns like the benchmark pulls above):
+
+- **Arithmetic** (1000), **Acronyms** (3594), **Counting Characters** (1001, sampled straight from Llama-3.1's own vocab) — all self-generated, no external data.
+- **Codeline Description** (4800, across 6 languages) — needed real digging: XLCoST's "snippet-level" data turned out to be single code lines, not the substantial blocks Table 2 shows, so switched to program-level and extracted a clean description out of its concatenated-comment field, plus wrote a small detokenizer to turn XLCoST's `NEW_LINE`/`INDENT`/`DEDENT` markers back into readable code. XLCoST itself now lives in `data/manifest.yaml`'s new `sources:` section (raw material for building a task, as opposed to `benchmarks:`, which Exp 1 evaluates directly).
+- **Word Repeat** and **Identifying Misspellings** (500 each, kept disjoint) — both sampled from the google-10000-english word list (now saved locally at `data/external/`), the latter also building the 10-example few-shot set Appendix B.5 describes.
+
+Chinese benchmarks (Appendix C.1) are intentionally skipped for now.
 
 ## What's left
 
-Roughly in the order it'll probably get tackled:
+Everything below still needs either model weights or GPU compute for the actual "run it and get numbers" step — that's deliberately being saved for last. But it's worth being precise about which *parts* of each are heavy vs. just code/small data that could be prepped ahead of time if useful:
 
-1. **Actually running Exp 1.** Right now we have the tokenization logic and the raw benchmark data, but not the harness that ties them together — loading each model, applying the paper's system prompts (Appendix B.1 spells these out per benchmark type), generating under each tokenization scheme, parsing answers, and computing the retention numbers in Table 1. Also need the actual model weights (Llama-3.1-8B-Instruct, Qwen2.5-7B-Instruct, OLMo-2-7B-Instruct — only their tokenizers are downloaded so far, full weights are ~45GB combined).
-2. **§3's "tokenization can help" tasks** — Counting Characters and Acronyms are fully self-generated (no external data needed), Codeline Description needs the XLCoST dataset, Arithmetic just needs random number generation. The digit-grouping and character-segmentation code already exists; what's missing is the task datasets and the eval harness for them.
-3. **§4's source-of-robustness experiments** — this is the training-stage analysis (OLMo2/Tulu3 at base/SFT/DPO/instruct) plus the actual SFT ablation finetuning run. Needs its own set of model checkpoints (~100GB+) and the `allenai/open-instruct`-based finetuning setup the paper used.
-4. **Appendix C.1's Chinese benchmarks** — lowest priority; also needs the character-segmentation multi-byte fix mentioned above first.
-5. **The data-storage decision** — commit the trimmed eval-only data directly, use Git LFS, or keep it as a gitignored "run this script" recipe. Whatever's easiest for you and your mentor to work with together.
+1. **Exp 1 (§2).** Needs the eval harness (system prompts from Appendix B.1, per-benchmark answer parsing/scoring, the retention-percentage math for Table 1 and length-ratio math for Figure 2 — all just code, no downloads, but hard to fully trust without a real model to test against) and the actual model weights (Llama-3.1-8B-Instruct, Qwen2.5-7B-Instruct, OLMo-2-7B-Instruct — only tokenizers cached so far, full weights ~45GB combined).
+2. **§3's tasks.** Data's done (above); still needs the same kind of harness/scoring code plus the same 3 models' weights to actually run against.
+3. **§4.1 (training-stage analysis).** Needs OLMo2/Tulu3 checkpoints across base/SFT/DPO/instruct (~100GB+, genuinely heavy) — plus the grammaticality metric needs LanguageTool (a ~200MB grammar-checker tool, not a model, could be set up independently) and the win-rate metric needs an `OPENAI_API_KEY` for the `alpaca_eval_gpt4` judge (an external credential, not a download).
+4. **§4.2 (SFT ablation).** The finetuning run itself needs Llama-3.2-1B + real GPU compute (paper used 8×L40S) — genuinely heavy. The Tulu 3 SFT Personas Instruction Following dataset it trains on, though, is a normal-sized text dataset (~13.7k examples, same ballpark as the 20 benchmarks already fetched) — not heavy on its own.
+5. **§4.3's probes.** Data's done; running Word Repeat / Identifying Misspellings against a model needs weights.
+6. **The data-storage decision** — commit the trimmed eval-only benchmark data directly, use Git LFS, or keep it as a gitignored "run this script" recipe. Whatever's easiest for you and your mentor to work with together.
 
 ## Getting set up
 
@@ -50,5 +61,6 @@ Roughly in the order it'll probably get tackled:
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ./venv/bin/python src/tokenizers/random_token_segmenter.py   # sanity-checks the tokenization algorithms
-./venv/bin/python src/data/fetch_benchmarks.py                # pulls all 20 Exp 1 benchmarks into data/benchmarks/
+./venv/bin/python src/data/fetch_benchmarks.py                # pulls all 20 Exp 1 benchmarks + XLCoST
+./venv/bin/python src/data/build_arithmetic.py                 # and the other build_*.py scripts in src/data/
 ```
