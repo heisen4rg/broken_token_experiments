@@ -199,3 +199,31 @@ benchmarks:
     hf_dataset: ucinlp/drop
     hf_config: null
     notes: null
+
+# Raw source material used to build the §3 constructed-task datasets
+# (src/data/build_*.py) -- not benchmarks evaluated directly in Exp 1.
+sources:
+  - name: xlcost
+    hf_dataset: codeparrot/xlcost-text-to-code
+    hf_data_files:
+      cpp: "hf://datasets/codeparrot/xlcost-text-to-code@refs%2Fconvert%2Fparquet/C++-program-level/train/0000.parquet"
+      csharp: "hf://datasets/codeparrot/xlcost-text-to-code@refs%2Fconvert%2Fparquet/Csharp-program-level/train/0000.parquet"
+      java: "hf://datasets/codeparrot/xlcost-text-to-code@refs%2Fconvert%2Fparquet/Java-program-level/train/0000.parquet"
+      javascript: "hf://datasets/codeparrot/xlcost-text-to-code@refs%2Fconvert%2Fparquet/Javascript-program-level/train/0000.parquet"
+      php: "hf://datasets/codeparrot/xlcost-text-to-code@refs%2Fconvert%2Fparquet/PHP-program-level/train/0000.parquet"
+      python: "hf://datasets/codeparrot/xlcost-text-to-code@refs%2Fconvert%2Fparquet/Python-program-level/train/0000.parquet"
+    notes: >
+      Source for §3's Codeline Description task. Same schema-mash issue as
+      alpaca_eval on the auto-converted revision, so pulling each language's
+      file explicitly. Using program-level (not snippet-level): snippet-level
+      turned out to be mostly single code lines (median 60 chars), which
+      doesn't match Table 2's example (a substantial multi-line block with
+      one clean description) -- program-level gives full functions (median
+      ~670 chars). Program-level's "text" field concatenates multiple
+      comments with " | " and " ; "; build_codeline_description.py takes
+      just the first segment (before the first "|") as the description,
+      which reads like a problem title and matches Table 2's style well
+      (e.g. "Maximum Prefix Sum possible by merging two given arrays").
+      6 of XLCoST's 7 languages used (excludes plain C), matching the
+      original XLCoST repo's own task listing and the paper's "6
+      programming languages."

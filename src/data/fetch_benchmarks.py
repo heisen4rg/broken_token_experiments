@@ -8,7 +8,7 @@ import yaml  # noqa: E402
 from datasets import concatenate_datasets, load_dataset, DatasetDict  # noqa: E402
 
 MANIFEST_PATH = Path(__file__).resolve().parents[2] / "data" / "manifest.yaml"
-OUTPUT_DIR = Path(__file__).resolve().parents[2] / "data" / "benchmarks"
+DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
 
 
 def _fetch_multi_config(hf_dataset, configs, hf_revision):
@@ -24,36 +24,42 @@ def _fetch_multi_config(hf_dataset, configs, hf_revision):
     })
 
 
+def _fetch_entry(entry, output_dir):
+    name = entry["name"]
+    hf_dataset = entry["hf_dataset"]
+    hf_config = entry.get("hf_config")
+    hf_revision = entry.get("hf_revision")
+    hf_data_files = entry.get("hf_data_files")
+
+    print(f"Fetching {name} ({hf_dataset}"
+          f"{', ' + str(hf_config) if hf_config else ''}"
+          f"{', revision=' + hf_revision if hf_revision else ''}"
+          f"{', explicit data_files' if hf_data_files else ''})...")
+
+    try:
+        if hf_data_files:
+            # Bypasses the dataset's own builder config entirely -- used
+            # when the repo's default/auto-converted config mixes
+            # incompatible schemas together (see e.g. alpaca_eval, xlcost).
+            dataset = load_dataset("parquet", data_files=hf_data_files)
+        elif isinstance(hf_config, list):
+            dataset = _fetch_multi_config(hf_dataset, hf_config, hf_revision)
+        else:
+            dataset = load_dataset(hf_dataset, hf_config, revision=hf_revision)
+        dataset.save_to_disk(str(output_dir / name))
+        return (name, True, None)
+    except Exception as e:
+        return (name, False, str(e))
+
+
 def fetch_all():
     manifest = yaml.safe_load(MANIFEST_PATH.read_text())
 
     results = []
-    for entry in manifest["benchmarks"]:
-        name = entry["name"]
-        hf_dataset = entry["hf_dataset"]
-        hf_config = entry.get("hf_config")
-        hf_revision = entry.get("hf_revision")
-        hf_data_files = entry.get("hf_data_files")
-
-        print(f"Fetching {name} ({hf_dataset}"
-              f"{', ' + str(hf_config) if hf_config else ''}"
-              f"{', revision=' + hf_revision if hf_revision else ''}"
-              f"{', explicit data_files' if hf_data_files else ''})...")
-
-        try:
-            if hf_data_files:
-                # Bypasses the dataset's own builder config entirely -- used
-                # when the repo's default/auto-converted config mixes
-                # incompatible schemas together (see e.g. alpaca_eval).
-                dataset = load_dataset("parquet", data_files=hf_data_files)
-            elif isinstance(hf_config, list):
-                dataset = _fetch_multi_config(hf_dataset, hf_config, hf_revision)
-            else:
-                dataset = load_dataset(hf_dataset, hf_config, revision=hf_revision)
-            dataset.save_to_disk(str(OUTPUT_DIR / name))
-            results.append((name, True, None))
-        except Exception as e:
-            results.append((name, False, str(e)))
+    for entry in manifest.get("benchmarks", []):
+        results.append(_fetch_entry(entry, DATA_ROOT / "benchmarks"))
+    for entry in manifest.get("sources", []):
+        results.append(_fetch_entry(entry, DATA_ROOT / "sources"))
 
     print("\n--- Summary ---")
     for name, ok, error in results:
